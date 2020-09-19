@@ -1,27 +1,33 @@
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
-import java.io.IOException;
+import java.io.File;
 
 public class Indexer {
-    public static void main(String[] args) throws InterruptedException, IOException, ClassNotFoundException {
-        runEnumerator(args);
+    public static final String DOC_COUNTER_CACHE = "counter.temp";
+
+    public static void main(String[] args) throws Exception {
+        // Run counter
+
+        runIndexer(args);
     }
 
-    private static void runEnumerator(String[] args) throws IOException, ClassNotFoundException, InterruptedException {
-        Configuration conf = new Configuration();
 
-        Job job = Job.getInstance(conf, "word enumerator");
-        job.setJarByClass(WordEnumerator.class);
-        job.setMapperClass(WordEnumerator.EnumeratorMapper.class);
-        job.setReducerClass(WordEnumerator.WordEnumeratorReducer.class);
-        job.setOutputKeyClass(IntWritable.class);
-        job.setOutputValueClass(Text.class);
+    private static void runIndexer(String[] args) throws Exception {
+        Configuration conf = new Configuration();
+        File cache = new File(DOC_COUNTER_CACHE);
+
+        Job job = Job.getInstance(conf, "indexer");
+        job.setJarByClass(IndexerJob.class);
+        job.setMapperClass(IndexerJob.IndexerMapper.class);
+        job.setReducerClass(IndexerJob.IndexerReducer.class);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(TFIDFWritable.class);
+        job.addCacheFile(cache.toURI());
 
         String output = args[0];
         FileOutputFormat.setOutputPath(job, new Path(output));
