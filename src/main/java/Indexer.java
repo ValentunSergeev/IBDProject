@@ -1,41 +1,70 @@
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.LazyOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.MultipleOutputs;
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 
 import java.io.File;
+import java.io.IOException;
 
 public class Indexer {
-    public static final String DOC_COUNTER_CACHE = "counter.temp";
+    public static final String DOC_COUNTER_CACHE = "temp/part-r-00000";
 
     public static void main(String[] args) throws Exception {
-        // Run counter
+        runCounter(args);
 
         runIndexer(args);
+    }
+
+    private static void runCounter(String[] args) throws IOException, ClassNotFoundException, InterruptedException {
+        Configuration conf = new Configuration();
+        Job job = Job.getInstance(conf, "document count");
+        job.setJarByClass(DocumentCount.class);
+        job.setMapperClass(DocumentCount.DocCountMapper.class);
+        job.setReducerClass(DocumentCount.DocCountReducer.class);
+
+        job.setOutputKeyClass(LongWritable.class);
+        job.setOutputValueClass(IntWritable.class);
+
+        addInputFiles(args, job);
+
+        FileOutputFormat.setOutputPath(job, new Path("temp"));
+
+        job.waitForCompletion(true);
     }
 
 
     private static void runIndexer(String[] args) throws Exception {
         Configuration conf = new Configuration();
-        File cache = new File(DOC_COUNTER_CACHE);
 
         Job job = Job.getInstance(conf, "indexer");
         job.setJarByClass(IndexerJob.class);
         job.setMapperClass(IndexerJob.IndexerMapper.class);
         job.setReducerClass(IndexerJob.IndexerReducer.class);
+        job.setMapOutputKeyClass(Text.class);
+        job.setMapOutputValueClass(Text.class);
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(TFIDFWritable.class);
-        job.addCacheFile(cache.toURI());
+//        job.addCacheFile(cache.toURI());
 
         String output = args[0];
         FileOutputFormat.setOutputPath(job, new Path(output));
 
+        addInputFiles(args, job);
+
+        job.waitForCompletion(true);
+    }
+
+    private static void addInputFiles(String[] args, Job job) throws IOException {
         for (int i = 1; i < args.length; i++) {
             FileInputFormat.addInputPath(job, new Path(args[i]));
         }
-
-        job.waitForCompletion(true);
     }
 }

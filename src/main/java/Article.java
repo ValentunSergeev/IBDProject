@@ -9,7 +9,7 @@ class Word {
         this.text = text;
     }
 
-    public int getId() {
+    public long getId() {
         return Utils.hashOf(text);
     }
 }

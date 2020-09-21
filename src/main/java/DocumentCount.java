@@ -1,9 +1,12 @@
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
@@ -18,30 +21,33 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 public class DocumentCount {
 
     public static class DocCountMapper
-            extends Mapper<Object, Text, Text, IntWritable>{
+            extends Mapper<Object, Text, LongWritable, IntWritable> {
 
         private final static IntWritable one = new IntWritable(1);
-        private static final Text wordText = new Text();
+        private static final LongWritable wordID = new LongWritable();
 
         public void map(Object key, Text articleContent, Context context
         ) throws IOException, InterruptedException {
             List<Article> articles = Utils.readArticles(articleContent.toString());
 
-            for(Article article : articles){
+            for (Article article : articles) {
                 List<Word> words = article.getWords();
-                for (Word word : words) {
-                    wordText.set(String.valueOf(word.getId()));
-                    context.write(wordText, one);
+                Set<String> contents = words.stream().map(word -> word.text).collect(Collectors.toSet());
+
+                for (String word : contents) {
+                    long id = Utils.hashOf(word);
+                    wordID.set(id);
+                    context.write(wordID, one);
                 }
             }
         }
     }
 
     public static class DocCountReducer
-            extends Reducer<Text,IntWritable,Text,IntWritable> {
+            extends Reducer<LongWritable, IntWritable, LongWritable, IntWritable> {
         private final IntWritable result = new IntWritable();
 
-        public void reduce(Text key, Iterable<IntWritable> counts,
+        public void reduce(LongWritable key, Iterable<IntWritable> counts,
                            Context context
         ) throws IOException, InterruptedException {
             int sum = 0;
@@ -51,19 +57,5 @@ public class DocumentCount {
             result.set(sum);
             context.write(key, result);
         }
-    }
-
-    public static void main(String[] args) throws Exception {
-        Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "document count");
-        job.setJarByClass(DocumentCount.class);
-        job.setMapperClass(DocCountMapper.class);
-        job.setCombinerClass(DocCountReducer.class);
-        job.setReducerClass(DocCountReducer.class);
-        job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(IntWritable.class);
-        FileInputFormat.addInputPath(job, new Path(args[0]));
-        FileOutputFormat.setOutputPath(job, new Path("counter.temp"));
-        System.exit(job.waitForCompletion(true) ? 0 : 1);
     }
 }

@@ -1,6 +1,7 @@
 import org.apache.commons.math3.util.Pair;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Writable;
 
 import java.io.DataInput;
@@ -10,27 +11,42 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class TFIDFWritable implements Writable {
-    private List<Pair<Integer, Double>> tfidf;
+    private List<Pair<Long, Double>> tfidf;
 
-    public TFIDFWritable(List<Pair<Integer, Double>> tfidf) {
+    public TFIDFWritable(List<Pair<Long, Double>> tfidf) {
         this.tfidf = tfidf;
     }
 
-    public List<Pair<Integer, Double>> getTfidf() {
+    public List<Pair<Long, Double>> getTfidf() {
         return tfidf;
     }
 
+    @Override
+    public String toString() {
+        StringBuilder builder = new StringBuilder();
+
+        String length = String.valueOf(tfidf.size());
+
+        builder.append(length);
+
+        for (Pair<Long, Double> pair : tfidf) {
+            builder.append('(').append(pair.getKey()).append(':')
+                    .append(pair.getValue()).append("),");
+        }
+
+        return builder.toString();
+    }
 
     @Override
     public void write(DataOutput out) throws IOException {
-        var key = new IntWritable();
-        var value = new DoubleWritable();
+        LongWritable key = new LongWritable();
+        DoubleWritable value = new DoubleWritable();
 
-        var length = new IntWritable(tfidf.size());
+        IntWritable length = new IntWritable(tfidf.size());
 
         length.write(out);
 
-        for (var pair : tfidf) {
+        for (Pair<Long, Double> pair : tfidf) {
             key.set(pair.getKey());
             value.set(pair.getValue());
 
@@ -48,14 +64,14 @@ public class TFIDFWritable implements Writable {
 
     @Override
     public void readFields(DataInput in) throws IOException {
-        var key = new IntWritable();
-        var value = new DoubleWritable();
+        LongWritable key = new LongWritable();
+        DoubleWritable value = new DoubleWritable();
 
-        var length = new IntWritable();
+        IntWritable length = new IntWritable();
 
         length.readFields(in);
 
-        var list = new ArrayList<Pair<Integer, Double>>(length.get());
+        ArrayList<Pair<Long, Double>> list = new ArrayList<>(length.get());
 
         for (int i = 0; i < length.get(); i++) {
             in.readChar();
@@ -69,7 +85,7 @@ public class TFIDFWritable implements Writable {
             in.readChar();
             in.readChar();
 
-            list.add(new Pair<>(Utils.hashOf(key.toString()), value.get()));
+            list.add(new Pair<>(key.get(), value.get()));
         }
 
         tfidf = list;

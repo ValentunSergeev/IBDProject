@@ -1,10 +1,14 @@
+import org.apache.commons.math3.util.Pair;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
-import org.apache.hadoop.mapreduce.filecache.DistributedCache;
 
+import java.io.BufferedReader;
 import java.io.IOException;
-import java.net.URI;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -34,24 +38,27 @@ public class IndexerJob {
     }
 
     public static class IndexerReducer extends Reducer<Text, Text, Text, TFIDFWritable> {
-        private Map<Integer, Integer> idfMap;
+        private Map<Long, Integer> idfMap;
 
         @Override
         protected void setup(Reducer.Context context) throws IOException {
-            URI[] uriList = DistributedCache.getCacheFiles(context.getConfiguration());
+            FileSystem fs = FileSystem.get(context.getConfiguration());
+            InputStream is = fs.open(new Path("temp/part-r-00000"));
 
-            idfMap = Utils.readIdfTable(uriList[0]);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+
+            idfMap = Utils.readIdfTable(reader);
         }
 
         @Override
         protected void reduce(Text articleName, Iterable<Text> wordsIterable, Context context) throws IOException, InterruptedException {
-            var words = new ArrayList<Word>();
+            List<Word> words = new ArrayList<>();
 
             wordsIterable.forEach(text -> words.add(new Word(text.toString())));
 
-            var result = Utils.vectorize(words, idfMap);
+            List<Pair<Long, Double>> result = Utils.vectorize(words, idfMap);
 
-            var resultWritable = new TFIDFWritable(result);
+            TFIDFWritable resultWritable = new TFIDFWritable(result);
 
             context.write(articleName, resultWritable);
         }
