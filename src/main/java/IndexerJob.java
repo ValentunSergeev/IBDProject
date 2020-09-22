@@ -1,14 +1,9 @@
 import org.apache.commons.math3.util.Pair;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -25,7 +20,7 @@ public class IndexerJob {
             for (Article article : articles) {
                 List<Word> words = article.getWords();
 
-                articleNameText.set(article.id);
+                articleNameText.set(article.compoundIdentifier());
 
                 for (Word word : words) {
 
@@ -37,30 +32,27 @@ public class IndexerJob {
         }
     }
 
-    public static class IndexerReducer extends Reducer<Text, Text, Text, TFIDFWritable> {
+    public static class IndexerReducer extends Reducer<Text, Text, Text, Text> {
         private Map<Long, Integer> idfMap;
 
         @Override
         protected void setup(Reducer.Context context) throws IOException {
-            FileSystem fs = FileSystem.get(context.getConfiguration());
-            InputStream is = fs.open(new Path("temp/part-r-00000"));
-
-            BufferedReader reader = new BufferedReader(new InputStreamReader(is));
-
-            idfMap = Utils.readIdfTable(reader);
+            idfMap = Utils.readIdfTable(context.getConfiguration());
         }
 
         @Override
-        protected void reduce(Text articleName, Iterable<Text> wordsIterable, Context context) throws IOException, InterruptedException {
+        protected void reduce(Text articleIdentifier, Iterable<Text> wordsIterable, Context context) throws IOException, InterruptedException {
             List<Word> words = new ArrayList<>();
 
             wordsIterable.forEach(text -> words.add(new Word(text.toString())));
 
-            List<Pair<Long, Double>> result = Utils.vectorize(words, idfMap);
+            Map<Long, Double> result = Utils.vectorize(words, idfMap);
 
-            TFIDFWritable resultWritable = new TFIDFWritable(result);
+            String resultJson = Utils.serializeTfIdfMap(result);
 
-            context.write(articleName, resultWritable);
+            Text resultWritable = new Text(resultJson);
+
+            context.write(articleIdentifier, resultWritable);
         }
 
         @Override

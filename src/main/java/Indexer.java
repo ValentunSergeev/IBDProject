@@ -16,6 +16,7 @@ import java.io.IOException;
 
 public class Indexer {
     public static final String DOC_COUNTER_CACHE = "temp/part-r-00000";
+    public static final String OUTPUT_DIR = "indexer_out/";
 
     public static void main(String[] args) throws Exception {
         runCounter(args);
@@ -35,27 +36,27 @@ public class Indexer {
 
         addInputFiles(args, job);
 
+        Utils.deleteFolder("temp", conf);
         FileOutputFormat.setOutputPath(job, new Path("temp"));
 
         job.waitForCompletion(true);
     }
 
-
     private static void runIndexer(String[] args) throws Exception {
         Configuration conf = new Configuration();
 
         Job job = Job.getInstance(conf, "indexer");
+
         job.setJarByClass(IndexerJob.class);
         job.setMapperClass(IndexerJob.IndexerMapper.class);
         job.setReducerClass(IndexerJob.IndexerReducer.class);
         job.setMapOutputKeyClass(Text.class);
         job.setMapOutputValueClass(Text.class);
         job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(TFIDFWritable.class);
-//        job.addCacheFile(cache.toURI());
+        job.setOutputValueClass(Text.class);
 
-        String output = args[0];
-        FileOutputFormat.setOutputPath(job, new Path(output));
+        Utils.deleteFolder(OUTPUT_DIR, conf);
+        FileOutputFormat.setOutputPath(job, new Path(OUTPUT_DIR));
 
         addInputFiles(args, job);
 
@@ -63,8 +64,8 @@ public class Indexer {
     }
 
     private static void addInputFiles(String[] args, Job job) throws IOException {
-        for (int i = 1; i < args.length; i++) {
-            FileInputFormat.addInputPath(job, new Path(args[i]));
+        for (String arg : args) {
+            FileInputFormat.addInputPath(job, new Path(arg));
         }
     }
 }

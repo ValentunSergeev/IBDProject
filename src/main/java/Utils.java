@@ -1,9 +1,13 @@
 import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import org.apache.commons.math3.util.Pair;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.mapreduce.Reducer;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
+import java.lang.reflect.Type;
 import java.net.URI;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -18,9 +22,11 @@ public class Utils {
      * Simple polynomial hash function for strings
      */
     public static long hashOf(String string) {
+        String lower = string.toLowerCase();
+
         long hash = 7;
-        for (int i = 0; i < string.length(); i++) {
-            hash = hash * 31 + string.charAt(i);
+        for (int i = 0; i < lower.length(); i++) {
+            hash = hash * 31 + lower.charAt(i);
         }
 
         return hash;
@@ -40,12 +46,17 @@ public class Utils {
         return result;
     }
 
-    public static Map<Long, Integer> readIdfTable(BufferedReader source) throws IOException {
+    public static Map<Long, Integer> readIdfTable(Configuration configuration) throws IOException {
+        FileSystem fs = FileSystem.get(configuration);
+        InputStream is = fs.open(new Path(Indexer.DOC_COUNTER_CACHE));
+
+        BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+
         Map<Long, Integer> idfMap = new HashMap<>();
 
         String line;
 
-        while ((line = source.readLine()) != null) {
+        while ((line = reader.readLine()) != null) {
             String[] keypair = line.split("\t");
 
             String rawId = keypair[0];
@@ -57,7 +68,7 @@ public class Utils {
         return idfMap;
     }
 
-    public static List<Pair<Long, Double>> vectorize(List<Word> words, Map<Long, Integer> idfMap) {
+    public static Map<Long, Double> vectorize(List<Word> words, Map<Long, Integer> idfMap) {
         Map<Long, Integer> frequencyMap = new HashMap<>();
 
         for (Word word : words) {
@@ -65,7 +76,7 @@ public class Utils {
             frequencyMap.put(word.getId(), newValue);
         }
 
-        ArrayList<Pair<Long, Double>> result = new ArrayList<>(frequencyMap.size());
+        Map<Long, Double> result = new HashMap<>(frequencyMap.size());
 
         for (Map.Entry<Long, Integer> entry : frequencyMap.entrySet()) {
             long id = entry.getKey();
@@ -73,11 +84,31 @@ public class Utils {
             double valueDouble = value.doubleValue();
             Integer norm = idfMap.get(id);
 
-            Double normalized = valueDouble / norm;
-
-            result.add(new Pair<>(id, normalized));
+            if (norm != null) {
+                Double normalized = valueDouble / norm;
+                result.put(id, normalized);
+            }
         }
 
         return result;
+    }
+
+    public static String serializeTfIdfMap(Map<Long, Double> map) {
+        return JSON_MAPPER.toJson(map);
+    }
+
+    public static Map<Long, Double> deserializeTfIdfMap(String source) {
+        Type typeOfHashMap = new TypeToken<Map<Long, Double>>() { }.getType();
+
+        return JSON_MAPPER.fromJson(source, typeOfHashMap);
+    }
+
+    public static void deleteFolder(String folder, Configuration configuration) throws IOException {
+        Path path = new Path(folder);
+        FileSystem fileSystem = FileSystem.get(configuration);
+
+        if (fileSystem.exists(path)) {
+            fileSystem.delete(path, true);
+        }
     }
 }
